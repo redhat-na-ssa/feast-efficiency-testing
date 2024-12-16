@@ -1,0 +1,15 @@
+project: feast_with_model
+provider: local
+registry: registry.db
+entity_key_serialization_version: 2
+online_store:
+  type: redis
+  connection_string: redis-model:6379
+offline_store:
+  type: postgres
+  host: ${DB_HOST}
+  port: ${DB_PORT}
+  database: ${DB_NAME}
+  db_schema: ${DB_SCHEMA}
+  user: ${DB_USERNAME}
+  password: ${DB_PASSWORD}

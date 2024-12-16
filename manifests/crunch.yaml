@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: feast-model-cmap
+  namespace: feast
+data:
+  init.sql: |
+    \c feast
+    CREATE SCHEMA feast AUTHORIZATION feastuser;
+    create table feast.heart_values
+    (
+        age                 INTEGER,
+        sex                 INTEGER,
+        cp                  INTEGER,
+        trtbps              INTEGER,
+        chol                INTEGER,
+        fbs                 INTEGER,
+        restecg             INTEGER,
+        thalachh            INTEGER,
+        exng                INTEGER,
+        oldpeak             DECIMAL,
+        slp                 INTEGER,
+        caa                 INTEGER,
+        thall               INTEGER,
+        patient_id          INTEGER,
+        event_timestamp     TIMESTAMP,
+        created             TIMESTAMP
+    );
+    create table feast.address_values
+    (
+        address_id          INTEGER,
+        num_beds            DECIMAL,
+        norm_basement_sq_ft DECIMAL,
+        event_timestamp     TIMESTAMP,
+        created             TIMESTAMP
+    );
+    ALTER DATABASE feast OWNER TO feastuser;
+    GRANT ALL PRIVILEGES ON DATABASE feast TO feastuser;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA feast TO feastuser;
+---
+apiVersion: postgres-operator.crunchydata.com/v1beta1
+kind: PostgresCluster
+metadata:
+  name: feast-model-postgres
+  namespace: feast
+spec:
+  port: 5432
+  users:
+    - name: feastuser
+      databases:
+        - feast
+  databaseInitSQL:
+    name: feast-model-cmap
+    key: init.sql
+  backups:
+    pgbackrest:
+      repos:
+        - volume:
+            volumeClaimSpec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 1Gi
+          name: repo1
+  instances:
+    - dataVolumeClaimSpec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+      replicas: 1
+      name: feast-model-postgres
+  postgresVersion: 15

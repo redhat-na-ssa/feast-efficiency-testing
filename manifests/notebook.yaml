@@ -1,0 +1,208 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    openshift.io/description: ""
+    openshift.io/display-name: kaggle-speed
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    opendatahub.io/dashboard: "true"
+  name: kaggle-speed
+  namespace: feast
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ocs-storagecluster-ceph-rbd
+  volumeMode: Filesystem
+---
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  annotations:
+    notebooks.opendatahub.io/inject-oauth: "true"
+    notebooks.opendatahub.io/last-image-selection: 's2i-generic-data-science-notebook:2024.1'
+    notebooks.opendatahub.io/last-size-selection: Medium
+    argocd.argoproj.io/sync-wave: "4"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    openshift.io/description: "Workbench with code repo present for quick experimentation"
+    openshift.io/display-name: kaggle-speed
+  labels:
+    app: kaggle-speed
+    opendatahub.io/dashboard: "true"
+    opendatahub.io/odh-managed: "true"
+  name: kaggle-speed
+  namespace: feast
+spec:
+  template:
+    spec:
+      containers:
+      - env:
+        - name: NOTEBOOK_ARGS
+          value: |-
+            --ServerApp.port=8888
+            --ServerApp.token=''
+            --ServerApp.password=''
+            --ServerApp.base_url=/notebook/feast/kaggle-speed
+            --ServerApp.quit_button=False
+        - name: JUPYTER_IMAGE
+          value: image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/s2i-generic-data-science-notebook:2024.1
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_SCHEMA
+          value: feast
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: feast-model-postgres-pguser-feastuser
+              key: dbname
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: feast-model-postgres-pguser-feastuser
+              key: host
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: feast-model-postgres-pguser-feastuser
+              key: user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: feast-model-postgres-pguser-feastuser
+              key: password
+        - name: PIP_CERT
+          value: /etc/pki/tls/custom-certs/ca-bundle.crt
+        - name: REQUESTS_CA_BUNDLE
+          value: /etc/pki/tls/custom-certs/ca-bundle.crt
+        - name: SSL_CERT_FILE
+          value: /etc/pki/tls/custom-certs/ca-bundle.crt
+        - name: PIPELINES_SSL_SA_CERTS
+          value: /etc/pki/tls/custom-certs/ca-bundle.crt
+        - name: GIT_SSL_CAINFO
+          value: /etc/pki/tls/custom-certs/ca-bundle.crt
+        image: image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/s2i-generic-data-science-notebook:2024.1
+        imagePullPolicy: IfNotPresent
+        resources:
+            limits:
+              cpu: '6'
+              memory: 24Gi
+            requests:
+              cpu: '3'
+              memory: 24Gi
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /notebook/feast/kaggle-speed/api
+            port: notebook-port
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: kaggle-speed
+        ports:
+        - containerPort: 8888
+          name: notebook-port
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /notebook/feast/kaggle-speed/api
+            port: notebook-port
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - mountPath: /opt/app-root/src
+          name: kaggle-speed
+        - mountPath: /etc/pki/tls/custom-certs/ca-bundle.crt
+          name: trusted-ca
+          readOnly: true
+          subPath: ca-bundle.crt
+        workingDir: /opt/app-root/src
+      - args:
+        - --provider=openshift
+        - --https-address=:8443
+        - --http-address=
+        - --openshift-service-account=kaggle-speed
+        - --cookie-secret-file=/etc/oauth/config/cookie_secret
+        - --cookie-expire=24h0m0s
+        - --tls-cert=/etc/tls/private/tls.crt
+        - --tls-key=/etc/tls/private/tls.key
+        - --upstream=http://localhost:8888
+        - --upstream-ca=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        - --email-domain=*
+        - --skip-provider-button
+        - --openshift-sar={"verb":"get","resource":"notebooks","resourceAPIGroup":"kubeflow.org","resourceName":"kaggle-speed","namespace":"$(NAMESPACE)"}
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        image: registry.redhat.io/openshift4/ose-oauth-proxy@sha256:4bef31eb993feb6f1096b51b4876c65a6fb1f4401fee97fa4f4542b6b7c9bc46
+        #image: registry.redhat.io/openshift4/ose-oauth-proxy:v4.14
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /oauth/healthz
+            port: oauth-proxy
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: oauth-proxy
+        ports:
+        - containerPort: 8443
+          name: oauth-proxy
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /oauth/healthz
+            port: oauth-proxy
+            scheme: HTTPS
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+        - mountPath: /etc/oauth/config
+          name: oauth-config
+        - mountPath: /etc/tls/private
+          name: tls-certificates
+      enableServiceLinks: false
+      serviceAccountName: kaggle-speed
+      volumes:
+      - name: kaggle-speed
+        persistentVolumeClaim:
+          claimName: kaggle-speed
+      - name: oauth-config
+        secret:
+          defaultMode: 420
+          secretName: kaggle-speed-oauth-config
+      - name: tls-certificates
+        secret:
+          defaultMode: 420
+          secretName: kaggle-speed-tls
+      - configMap:
+          items:
+            - key: ca-bundle.crt
+              path: ca-bundle.crt
+          name: workbench-trusted-ca-bundle
+          optional: true
+        name: trusted-ca
